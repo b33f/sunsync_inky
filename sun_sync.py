@@ -54,7 +54,6 @@ TAUPE = 7
 DOW = ['Mon', 'Tue', 'Wed', 'Thr', 'Fri', 'Sat', 'Sun']
 fDOW = ['DOW', 'Sun', 'Mon', 'Tue', 'Wed', 'Thr', 'Fri', 'Sat']
 
-
 locations = {}
 
 #Get location data
@@ -142,9 +141,7 @@ def my_bearer_token():
         "grant_type":"password",
         "client_id":"csp-web"
         }
-    #print("Pre REQ")
-    #print(headers)
-    #print(payload)
+
     try:
         raw_data = requests.post(loginurl, json=payload, headers=headers).json()
     except OSError as error:
@@ -204,11 +201,13 @@ def my_current_usage():
         graphics.set_font("serif")        
         graphics.set_pen(BLACK)
         graphics.set_thickness(6)
-        #60, 150, 255, 358, 460
-        graphics.text("Genr:", 0, 150, 800, 2)
-        graphics.text("Load:", 0, 255, 800, 2)
-        graphics.text("BatU:", 0, 358, 800, 2)
-        graphics.text("Grid:", 0, 460, 800, 2)
+        #best - 60, 150, 255, 358, 460
+        pv_titles_y = 153
+        pv_titles = ['Genr:', 'Load:', 'BatU:', 'Grid:']
+        pv_titles = ['Pv:', 'Ld:', 'Bt:', 'Gr:']
+        for i in range (0, 4):
+            graphics.text(pv_titles[i], 0, pv_titles_y, 800, 2)
+            pv_titles_y = pv_titles_y + (i+1*100)
         
         graphics.set_font("sans")
         graphics.set_thickness(8)
@@ -220,42 +219,54 @@ def my_current_usage():
             graphics.set_pen(RED)
         else:
             graphics.set_pen(GREEN)
-        graphics.text(str(current_gen_w) + 'w', 180, 132, 800, 4)
+        graphics.text(str(current_gen_w) + 'w', 110, 132, 800, 4)
 
         #ELEC LOAD
         graphics.set_pen(BLACK)
-        graphics.text(str(your_load) + 'w', 180, 232, 800, 4)
+        graphics.text(str(your_load) + 'w', 110, 232, 800, 4)
         
         #BATT USAGE
         if (your_bat_usg > 1):
             graphics.set_pen(RED)
-            graphics.text(str(your_bat_usg) + 'w+', 180, 336, 800, 4)
+            graphics.text(str(your_bat_usg) + 'w+', 110, 336, 800, 4)
         else:
             graphics.set_pen(GREEN)
-            graphics.text(str(your_bat_usg)[1:] + 'w-', 180, 336, 800, 4)
+            graphics.text(str(your_bat_usg)[1:] + 'w-', 110, 336, 800, 4)
 
         #ELEC GRID
         graphics.set_pen(BLACK)
         if (your_grid < 0):
             graphics.set_pen(RED)
-            graphics.text(str(your_grid)[1:] + 'w-', 180, 440, 800, 4)
+            graphics.text(str(your_grid)[1:] + 'w-', 110, 440, 800, 4)
         else:
             graphics.set_pen(BLUE)
-            graphics.text(str(your_grid) + 'w', 180, 440, 800, 4)
+            graphics.text(str(your_grid) + 'w', 110, 440, 800, 4)
         
         graphics.set_pen(BLACK)
         graphics.set_thickness(4)
         graphics.text('Batt', 730, 105, 800, 1)
         
-        graphics.set_pen(GREEN)
-        graphics.rectangle(720, 130, 80, 50) # draw rectangle - x,y,width, height
-        graphics.rectangle(720, 190, 80, 50)
-        graphics.set_pen(ORANGE)
-        graphics.rectangle(720, 250, 80, 50)
-        graphics.rectangle(720, 310, 80, 50)
-        graphics.set_pen(RED)
-        graphics.rectangle(720, 370, 80, 50)
-        graphics.rectangle(720, 430, 80, 50)
+        batt_y = 130
+        batt_c = [0,0,0,0,0,0] #default to black battery indicator
+        if your_soc >= 80:
+            batt_c = [GREEN, GREEN, GREEN, GREEN, GREEN, GREEN]
+
+        empty_sqrs = 0
+        
+        if your_soc >= 16.6:
+            #print ("Debug SOC: " + str(your_soc))
+            full_sqrs = round(your_soc / 16.6)
+            #print ("Debug SRQS: " + str(test_sqrs))
+            empty_sqrs = 6 - full_sqrs
+            #print ("Debug E-SRQS: " + str(empty_sqrs))
+        
+        for i in range (0, 6):
+            graphics.set_pen(batt_c[i])
+            graphics.rectangle(720, batt_y, 80, 50) # draw rectangle - x,y,width, height
+            if i+1 <= empty_sqrs:
+                graphics.set_pen(WHITE)
+                graphics.rectangle(730, batt_y, 60, 40)
+            batt_y = batt_y + 60
         
         #your_soc = 20
         graphics.set_pen(BLACK)
@@ -467,5 +478,3 @@ if __name__ == "__main__":
     ih.inky_frame.button_b.led_on()
     #clear_screen()
     #ih.clear_button_leds()
-    
-
