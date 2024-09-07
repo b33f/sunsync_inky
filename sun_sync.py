@@ -67,6 +67,8 @@ else:
         locations['Local'] = ['51.507351', '-0.127758', 'LON']
         locations['New York'] = ['40.712776', '-74.005974', 'NYC']
         locations['Singapore'] = ['1.352083', '103.819839', 'SGP']
+        locations['London'] = ['51.507351', '-0.127758', 'LON']
+        locations['Malmo'] = ['55.604980', '13.003822', 'MMX']
         f.write(json.dumps(locations))
         f.flush()
 
@@ -242,44 +244,8 @@ def my_current_usage():
             graphics.set_pen(BLUE)
             graphics.text(str(your_grid) + 'w', 110, 440, 800, 4)
         
-        graphics.set_pen(BLACK)
-        graphics.set_thickness(4)
-        graphics.text('Batt', 730, 105, 800, 1)
+        draw_batt(your_soc)
         
-        batt_y = 130
-        batt_c = [0,0,0,0,0,0] #default to black battery indicator
-        if your_soc >= 80:
-            batt_c = [GREEN, GREEN, GREEN, GREEN, GREEN, GREEN]
-
-        empty_sqrs = 0
-        
-        if your_soc >= 16.6:
-            #print ("Debug SOC: " + str(your_soc))
-            full_sqrs = round(your_soc / 16.6)
-            #print ("Debug SRQS: " + str(test_sqrs))
-            empty_sqrs = 6 - full_sqrs
-            #print ("Debug E-SRQS: " + str(empty_sqrs))
-        
-        for i in range (0, 6):
-            graphics.set_pen(batt_c[i])
-            graphics.rectangle(720, batt_y, 80, 50) # draw rectangle - x,y,width, height
-            if i+1 <= empty_sqrs:
-                graphics.set_pen(WHITE)
-                graphics.rectangle(730, batt_y, 60, 40)
-            batt_y = batt_y + 60
-        
-        #your_soc = 20
-        graphics.set_pen(BLACK)
-        MIN_TRI_Y = 490
-        CURR_TRI_Y_OFFSET = round(your_soc * 3.5)
-        CURR_TRI_Y = MIN_TRI_Y - CURR_TRI_Y_OFFSET + 10
-        graphics.triangle(690, CURR_TRI_Y - 40, 690, CURR_TRI_Y, 718, CURR_TRI_Y - 20)#triangle(x1, y1, x2, y2, x3, y3)
-        if your_soc == 100:
-            graphics.text('Full', 585, CURR_TRI_Y + 30, 800, 2)
-        elif your_soc >= 45:
-            graphics.text(str(your_soc) + '%', 585, CURR_TRI_Y + 30, 800, 2)
-        else:
-            graphics.text(str(your_soc) + '%', 585, CURR_TRI_Y - 60, 800, 2)
         graphics.update()
     return current_gen_w
 
@@ -375,6 +341,58 @@ def my_current_weather(LOCATION):
     
     return 1
 
+def remote_weather(REMOTE_LOCATIONS):
+    # Connect to WiFi
+    uasyncio.get_event_loop().run_until_complete(network_manager.client(WIFI_CONFIG.SSID, WIFI_CONFIG.PSK))
+    
+    headers_and_token = {
+    'Content-type':'application/json', 
+    'Accept':'application/json',
+    'Authorization': the_bearer_token_string
+    }
+    inverter_req = requests.get(inverter_endpoint, headers=headers_and_token)
+    inverter_response = inverter_req.json()
+    your_soc = round(float(inverter_response['data']['soc']))
+    #print ("Debug yoursoc: " + str(your_soc))
+    draw_batt(your_soc)
+    
+    
+    headers = {
+    'Content-type':'application/json', 
+    'Accept':'application/json'
+    }
+    
+    wloc_dict = {}
+    
+    for WLOC in REMOTE_LOCATIONS:
+        print ('REMOTE WEATHER RUN: ' + locations[WLOC][2])
+                
+        wloc_temp_endpoint = 'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s'%(locations[WLOC][0], locations[WLOC][1])
+        wloc_temp_endpoint = wloc_temp_endpoint + '&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=5'
+        try:
+            wloc_temp_req = requests.get(wloc_temp_endpoint)
+        except OSError as error:
+            print(str("errornr="),error)
+        wloc_temp_response = wloc_temp_req.json()
+        wloc_dict[WLOC] = {'title': locations[WLOC][2], 'min': wloc_temp_response['daily']['temperature_2m_min'][0],
+                           'max': wloc_temp_response['daily']['temperature_2m_max'][0]}
+        
+        
+    #print ("Debug wloc_dict: " + str(wloc_dict))
+    gc.collect()
+    graphics.set_font("serif")        
+    graphics.set_pen(BLACK)
+    graphics.set_thickness(6)
+    #best - 60, 150, 255, 358, 460
+    wloc_titles_y = 453
+    for i in range (0, 5):
+        graphics.text(wloc_dict[REMOTE_LOCATIONS[i]]['title'] + ": " + str(wloc_dict[REMOTE_LOCATIONS[i]]['min']) + " " + str(wloc_dict[REMOTE_LOCATIONS[i]]['max']), 0, wloc_titles_y, 800, 2)
+        wloc_titles_y = wloc_titles_y - (i+1*75)
+        
+    graphics.update()
+    return 1
+
+
 def calc_dow(year,month,day):
     """ day of week, Sunday = 1, Saturday = 7
      http://en.wikipedia.org/wiki/Zeller%27s_congruence """
@@ -433,6 +451,49 @@ def update_clock_ntp():
     print (timestring + ' Loop Start (UTC)')
     return 1
 
+def draw_batt(your_soc):
+    graphics.set_font("sans")
+    graphics.set_pen(BLACK)
+    graphics.set_thickness(4)
+    graphics.text('Batt', 730, 105, 800, 1)
+        
+    batt_y = 130
+    batt_c = [0,0,0,0,0,0] #default to black battery indicator
+    if your_soc >= 80:
+        batt_c = [GREEN, GREEN, GREEN, GREEN, GREEN, GREEN]
+
+    empty_sqrs = 0
+        
+    if your_soc >= 16.6:
+        #print ("Debug SOC: " + str(your_soc))
+        full_sqrs = round(your_soc / 16.6)
+        #print ("Debug SRQS: " + str(test_sqrs))
+        empty_sqrs = 6 - full_sqrs
+        #print ("Debug E-SRQS: " + str(empty_sqrs))
+        
+    for i in range (0, 6):
+        graphics.set_pen(batt_c[i])
+        graphics.rectangle(720, batt_y, 80, 50) # draw rectangle - x,y,width, height
+        if i+1 <= empty_sqrs:
+            graphics.set_pen(WHITE)
+            graphics.rectangle(730, batt_y, 60, 40)
+        batt_y = batt_y + 60
+        
+    #your_soc = 20
+    graphics.set_pen(BLACK)
+    MIN_TRI_Y = 490
+    CURR_TRI_Y_OFFSET = round(your_soc * 3.5)
+    CURR_TRI_Y = MIN_TRI_Y - CURR_TRI_Y_OFFSET + 10
+    graphics.triangle(690, CURR_TRI_Y - 40, 690, CURR_TRI_Y, 718, CURR_TRI_Y - 20)#triangle(x1, y1, x2, y2, x3, y3)
+    if your_soc == 100:
+        graphics.text('Full', 585, CURR_TRI_Y + 30, 800, 2)
+    elif your_soc >= 45:
+        graphics.text(str(your_soc) + '%', 585, CURR_TRI_Y + 30, 800, 2)
+    else:
+        graphics.text(str(your_soc) + '%', 585, CURR_TRI_Y - 60, 800, 2)
+    return 1
+
+
 #update function if called from main
 def update():
     while True:
@@ -449,7 +510,7 @@ def update():
         #
         clear_screen()
         update_clock_ntp()
-        my_current_weather(locations['New York'])
+        my_current_weather(locations['Local'])
         # Time to have a little nap until the next update
         rtc.set_timer(UPDATE_INTERVAL)
         hold_vsys_en_pin.init(Pin.IN)
@@ -457,7 +518,7 @@ def update():
         #
         clear_screen()
         update_clock_ntp()
-        my_current_weather(locations['Local'])
+        remote_weather(['London', 'Singapore', 'Malmo', 'New York', 'Local'])
         # Time to have a little nap until the next update
         rtc.set_timer(UPDATE_INTERVAL)
         hold_vsys_en_pin.init(Pin.IN)
@@ -469,6 +530,9 @@ if __name__ == "__main__":
     update()
     clear_screen()
     update_clock_ntp()
+    my_bearer_token()
+    remote_weather(['London', 'Singapore', 'Malmo', 'New York', 'Local'])
+    clear_screen()
     my_current_weather(locations['New York'])
     ih.clear_button_leds()
     ih.inky_frame.button_a.led_on()
@@ -478,3 +542,5 @@ if __name__ == "__main__":
     ih.inky_frame.button_b.led_on()
     #clear_screen()
     #ih.clear_button_leds()
+    
+
