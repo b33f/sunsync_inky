@@ -67,8 +67,9 @@ else:
         locations['Local'] = ['51.507351', '-0.127758', 'LON']
         locations['New York'] = ['40.712776', '-74.005974', 'NYC']
         locations['Singapore'] = ['1.352083', '103.819839', 'SGP']
-        locations['London'] = ['51.507351', '-0.127758', 'LON']
+        locations['Manchester'] = ['53.480759', '-2.242631', 'MAN']
         locations['Malmo'] = ['55.604980', '13.003822', 'MMX']
+        locations['ListOrder'] = ['Manchester', 'Singapore', 'Malmo', 'New York', 'Local']
         f.write(json.dumps(locations))
         f.flush()
 
@@ -518,7 +519,7 @@ def update():
         #
         clear_screen()
         update_clock_ntp()
-        remote_weather(['London', 'Singapore', 'Malmo', 'New York', 'Local'])
+        remote_weather(locations['ListOrder'])
         # Time to have a little nap until the next update
         rtc.set_timer(UPDATE_INTERVAL)
         hold_vsys_en_pin.init(Pin.IN)
@@ -527,11 +528,11 @@ def update():
 
 # print functions showing token and current generation in Watts
 if __name__ == "__main__":
-    update()
+    #update()
     clear_screen()
     update_clock_ntp()
     my_bearer_token()
-    remote_weather(['London', 'Singapore', 'Malmo', 'New York', 'Local'])
+    remote_weather(locations['ListOrder'])
     clear_screen()
     my_current_weather(locations['New York'])
     ih.clear_button_leds()
