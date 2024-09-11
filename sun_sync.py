@@ -106,7 +106,7 @@ def print_header(local_curr_time, local_curr_temp):
     rtc_current=machine.RTC()
     timestamp=rtc_current.datetime()
     dow_now = DOW[timestamp[3]]
-    timestring1="%02d-%02d"%(timestamp[1:3])
+    timestring1="%02d-%02d"%(timestamp[2], timestamp[1])
     if (int(timestamp[4]) + 1) == 24:
         timestring2='00'
     else:
@@ -504,6 +504,8 @@ def update():
         #print ('update clock done')
         my_bearer_token()
         my_current_usage()
+        # Free memory
+        gc.collect()
         # Time to have a little nap until the next update
         rtc.set_timer(UPDATE_INTERVAL)
         hold_vsys_en_pin.init(Pin.IN)
@@ -512,6 +514,8 @@ def update():
         clear_screen()
         update_clock_ntp()
         my_current_weather(locations['Local'])
+        # Free memory
+        gc.collect()
         # Time to have a little nap until the next update
         rtc.set_timer(UPDATE_INTERVAL)
         hold_vsys_en_pin.init(Pin.IN)
@@ -520,6 +524,8 @@ def update():
         clear_screen()
         update_clock_ntp()
         remote_weather(locations['ListOrder'])
+        # Free memory
+        gc.collect()
         # Time to have a little nap until the next update
         rtc.set_timer(UPDATE_INTERVAL)
         hold_vsys_en_pin.init(Pin.IN)
@@ -528,12 +534,12 @@ def update():
 
 # print functions showing token and current generation in Watts
 if __name__ == "__main__":
-    #update()
+    update()
     clear_screen()
     update_clock_ntp()
     my_bearer_token()
-    remote_weather(locations['ListOrder'])
-    clear_screen()
+    #remote_weather(locations['ListOrder'])
+    #clear_screen()
     my_current_weather(locations['New York'])
     ih.clear_button_leds()
     ih.inky_frame.button_a.led_on()
