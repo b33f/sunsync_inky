@@ -23,6 +23,9 @@ BLACK, WHITE, GREEN, BLUE, RED, YELLOW, ORANGE, TAUPE = range(8)
 DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 fDOW = ['DOW', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+# Debug Mode
+DEBUG_MODE = True  # Set to False to disable debug output
+
 # Initialize display and other components
 graphics = PicoGraphics(DISPLAY)
 ih.clear_button_leds()
@@ -82,9 +85,6 @@ inverter_endpoint = f'https://api.sunsynk.net/api/v1/inverter/battery/{my_sun_se
 grid_endpoint = f'https://api.sunsynk.net/api/v1/inverter/grid/{my_sun_serial}/realtime?sn={my_sun_serial}'
 load_endpoint = f'https://api.sunsynk.net/api/v1/inverter/load/{my_sun_serial}/realtime?sn={my_sun_serial}'
 
-# Debug Mode
-DEBUG_MODE = False  # Set to False to disable debug output
-
 def debug_print(message):
     """Utility function to print debug messages when DEBUG_MODE is enabled."""
     if DEBUG_MODE:
@@ -94,10 +94,15 @@ def print_header(local_curr_time, local_curr_temp):
     """Display the current time and weather data."""
     rtc_current = RTC()
     timestamp = rtc_current.datetime()
-    dow_now = DOW[timestamp[3]]
+    dow_now = DOW[timestamp[3]] #calculate Day Of the Week for a date
     timestring1 = f"{timestamp[2]:02d}-{timestamp[1]:02d}"
-    timestring2 = f"{timestamp[4]:02d}"
-
+    
+    if (int(timestamp[4]) + 1) == 24: #adjust for UTC
+        timestring2='00'
+    else:
+        timestring2=int(timestamp[4]) + 1
+    timestring2 = f"{timestring2:02d}"
+    
     timestring = f"{dow_now} {timestring1} {timestring2}:{timestamp[5]:02d}"
     print(f"{timestring} - Now")
     print(f"{local_curr_time} - Weather Data")
@@ -192,7 +197,7 @@ def my_current_usage():
             print("Error: load_response is None")
             return
 
-        local_curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={LOCAL_LOCATION[0]}&longitude={LOCAL_LOCATION[1]}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=5'
+        local_curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={LOCAL_LOCATION[0]}&longitude={LOCAL_LOCATION[1]}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=1'
         curr_temp_response = requests.get(local_curr_temp_endpoint)
         if curr_temp_response.status_code == 200:
             curr_temp_response = curr_temp_response.json()
@@ -287,35 +292,6 @@ def display_power_data(current_gen_w, load_power, bat_usage, grid_power):
     graphics.set_pen(BLUE if grid_power > 0 else RED)
     graphics.text(f"{abs(grid_power)}W{'-' if grid_power < 0 else ''}", 110, 440, 800, 4)
 
-
-def draw_batt(soc):
-    """Draw battery status indicator based on state of charge."""
-    graphics.set_font("sans")
-    graphics.set_pen(BLACK)
-    graphics.set_thickness(4)
-    graphics.text('Batt', 730, 105, 800, 1)
-
-    batt_y = 130
-    batt_c = [GREEN if soc >= 80 else BLACK] * 6
-
-    empty_sqrs = max(0, 6 - round(soc / 16.6))
-
-    for i in range(6):
-        graphics.set_pen(batt_c[i])
-        graphics.rectangle(720, batt_y, 80, 50)  # draw rectangle - x,y,width, height
-        if i < empty_sqrs:
-            graphics.set_pen(WHITE)
-            graphics.rectangle(730, batt_y, 60, 40)
-        batt_y += 60
-
-    # Display percentage and battery level indicator
-    graphics.set_pen(BLACK)
-    CURR_TRI_Y = 490 - round(soc * 3.5) + 10
-    graphics.triangle(690, CURR_TRI_Y - 40, 690, CURR_TRI_Y, 718, CURR_TRI_Y - 20)
-
-    text_y = CURR_TRI_Y - 60 if soc < 45 else CURR_TRI_Y + 30
-    graphics.text(f"{soc}%" if soc < 100 else "Full", 585, text_y, 800, 2)
-
 def my_current_weather(LOCATION):
     """Fetch and display the current weather for a given location."""
     headers = {
@@ -326,7 +302,7 @@ def my_current_weather(LOCATION):
     # Construct the weather API endpoint with the given location coordinates
     curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={LOCATION[0]}&longitude={LOCATION[1]}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=5'
 
-    print(f"WEATHER RUN: {LOCATION[2]}")
+    print(f"FULL WEATHER RUN: {LOCATION[2]}")
     
     try:
         curr_temp_req = requests.get(curr_temp_endpoint)
@@ -411,33 +387,13 @@ def my_current_weather(LOCATION):
         graphics.set_pen(BLUE)
         graphics.set_thickness(4)
         graphics.text(daily_forecast, 140, forecast_start_y + (forecast_offset_y * i), 800, 2, 0, 1)
-    
+        
+    #Get the battery state of charge (SOC)    
+    soc = get_soc()
+    print(f"DEBUG SOC = {soc}")
+        
     graphics.update()
     return 1
-
-def calc_dow(year,month,day):
-    """Calculate the day of the week for a given date.
-    Sunday = 1, Saturday = 7
-    http://en.wikipedia.org/wiki/Zeller%27s_congruence """
-    m, q = month, day
-    if m == 1:
-        m = 13
-        year -= 1
-    elif m == 2:
-        m = 14
-        year -= 1
-    K = year % 100    
-    J = year // 100
-    f = (q + int(13*(m + 1)/5.0) + K + int(K/4.0))
-    fg = f + int(J/4.0) - 2 * J
-    fj = f + 5 - J
-    if year > 1582:
-        dow = fg % 7
-    else:
-        dow = fj % 7
-    if dow == 0:
-        dow = 7
-    return dow
 
 def remote_weather(REMOTE_LOCATIONS):
     """Fetch and display the weather for multiple locations."""
@@ -458,7 +414,7 @@ def remote_weather(REMOTE_LOCATIONS):
             continue
 
         latitude, longitude, short_name = location_info
-        curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=5'
+        curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=1'
 
         print(f"Fetching weather for {short_name}...")
         try:
@@ -485,17 +441,99 @@ def remote_weather(REMOTE_LOCATIONS):
             short_name = location_info[2]
             min_temp = weather_data[location]['daily']['temperature_2m_min'][0]
             max_temp = weather_data[location]['daily']['temperature_2m_max'][0]
-            forecast_text = f"{short_name}: {min_temp}c .. {max_temp}c"
+            forecast_text = f"{short_name}: {min_temp}c {max_temp}c"
             debug_print("DEBUG: Y POS = " + str(y_position))
             graphics.text(forecast_text, 0, y_position, 800, 2)
             y_position -= 75  # Move up for the next location
         else:
             debug_print("Skipping " + location + ", do not have weather data")
 
-
+    soc = get_soc()
+    draw_batt(soc)
+    
     graphics.update()
     return 1
 
+
+def get_soc():
+    headers_and_token = {
+        'Content-type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': the_bearer_token_string }
+    inverter_response = requests.get(inverter_endpoint, headers=headers_and_token)
+    if inverter_response.status_code == 200:
+        inverter_response = inverter_response.json()
+        debug_print(f"Inverter response: {inverter_response}")
+    else:
+        print("Error: inverter_response is None")
+        
+    # Ensure inverter_response['data'] exists and check for 'soc'
+    soc = 0 #default to a 0 State of Charge for the battery
+    if inverter_response and 'data' in inverter_response and inverter_response['data'] is not None:
+        if 'soc' in inverter_response['data'] and inverter_response['data']['soc'] is not None:
+            soc = round(float(inverter_response['data']['soc']))
+        else:
+            print("SOC is missing or None, using default value of 0")
+            soc = 0  # Assign default value
+    else:
+        print("Inverter data is missing, using default value for SOC.")
+        soc = 0
+        
+    return soc
+
+
+def draw_batt(soc):
+    """Draw battery status indicator based on state of charge."""
+    graphics.set_font("sans")
+    graphics.set_pen(BLACK)
+    graphics.set_thickness(4)
+    graphics.text('Batt', 730, 105, 800, 1)
+
+    batt_y = 130
+    batt_c = [GREEN if soc >= 80 else BLACK] * 6
+
+    empty_sqrs = max(0, 6 - round(soc / 16.6))
+
+    for i in range(6):
+        graphics.set_pen(batt_c[i])
+        graphics.rectangle(720, batt_y, 80, 50)  # draw rectangle - x,y,width, height
+        if i < empty_sqrs:
+            graphics.set_pen(WHITE)
+            graphics.rectangle(730, batt_y, 60, 40)
+        batt_y += 60
+
+    # Display percentage and battery level indicator
+    graphics.set_pen(BLACK)
+    CURR_TRI_Y = 490 - round(soc * 3.5) + 10
+    graphics.triangle(690, CURR_TRI_Y - 40, 690, CURR_TRI_Y, 718, CURR_TRI_Y - 20)
+
+    text_y = CURR_TRI_Y - 60 if soc < 45 else CURR_TRI_Y + 30
+    graphics.text(f"{soc}%" if soc < 100 else "Full", 585, text_y, 800, 2)
+
+
+def calc_dow(year,month,day):
+    """Calculate the day of the week for a given date.
+    Sunday = 1, Saturday = 7
+    http://en.wikipedia.org/wiki/Zeller%27s_congruence """
+    m, q = month, day
+    if m == 1:
+        m = 13
+        year -= 1
+    elif m == 2:
+        m = 14
+        year -= 1
+    K = year % 100    
+    J = year // 100
+    f = (q + int(13*(m + 1)/5.0) + K + int(K/4.0))
+    fg = f + int(J/4.0) - 2 * J
+    fj = f + 5 - J
+    if year > 1582:
+        dow = fg % 7
+    else:
+        dow = fj % 7
+    if dow == 0:
+        dow = 7
+    return dow
 
 def clear_screen():
     """Clear the screen."""
