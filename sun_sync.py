@@ -19,12 +19,13 @@ I2C_SDA_PIN = 4
 I2C_SCL_PIN = 5
 HOLD_VSYS_EN_PIN = 2
 UPDATE_INTERVAL = 60  # 1 minute in seconds
+#UPDATE_INTERVAL = 1
 BLACK, WHITE, GREEN, BLUE, RED, YELLOW, ORANGE, TAUPE = range(8)
 DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 fDOW = ['DOW', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 # Debug Mode
-DEBUG_MODE = True  # Set to False to disable debug output
+DEBUG_MODE = False  # Set to False to disable debug output
 
 # Initialize display and other components
 graphics = PicoGraphics(DISPLAY)
@@ -104,8 +105,8 @@ def print_header(local_curr_time, local_curr_temp):
     timestring2 = f"{timestring2:02d}"
     
     timestring = f"{dow_now} {timestring1} {timestring2}:{timestamp[5]:02d}"
-    print(f"{timestring} - Now")
-    print(f"{local_curr_time} - Weather Data")
+    print(f"{timestring} - Header Now")
+    print(f"{local_curr_time} - Header Local Weather Data")
 
     graphics.set_pen(BLACK)
     graphics.rectangle(0, 0, 800, 60)
@@ -261,6 +262,11 @@ def my_current_usage():
             print_header(local_curr_time, local_curr_temp)
             display_power_data(current_gen_w, load_power, bat_usage, grid_power)
             draw_batt(soc)
+            current_gen_w = []
+            #load_power = []
+            #bat_usage = []
+            #grid_power = []
+            
             graphics.update()
 
     return current_gen_w
@@ -291,6 +297,7 @@ def display_power_data(current_gen_w, load_power, bat_usage, grid_power):
     # Grid
     graphics.set_pen(BLUE if grid_power > 0 else RED)
     graphics.text(f"{abs(grid_power)}W{'-' if grid_power < 0 else ''}", 110, 440, 800, 4)
+    
 
 def my_current_weather(LOCATION):
     """Fetch and display the current weather for a given location."""
@@ -329,7 +336,7 @@ def my_current_weather(LOCATION):
     hci = 0
 
     # Extract the RTC's current time
-    rtc_current = machine.RTC()
+    rtc_current = RTC()
     timestamp = rtc_current.datetime()
     first_hour = int(timestamp[4]) + 1
     last_hour = first_hour + 3
@@ -380,7 +387,7 @@ def my_current_weather(LOCATION):
         graphics.set_font("serif")
         graphics.set_pen(BLACK)
         graphics.set_thickness(6)
-        debug_print("DEBUG: DOW num / day:" + str(day_of_week) + " - " + str(fDOW[day_of_week]))
+        #debug_print("DEBUG: DOW num / day:" + str(day_of_week) + " - " + str(fDOW[day_of_week]))
         graphics.text(fDOW[day_of_week], 0, forecast_start_y + (forecast_offset_y * i), 800, 2)
         
         daily_forecast = f"{curr_temp_response['daily']['temperature_2m_min'][i]}c {curr_temp_response['daily']['temperature_2m_max'][i]}c {curr_temp_response['daily']['precipitation_probability_max'][i]}%"
@@ -390,7 +397,7 @@ def my_current_weather(LOCATION):
         
     #Get the battery state of charge (SOC)    
     soc = get_soc()
-    print(f"DEBUG SOC = {soc}")
+    debug_print(f"DEBUG SOC = {soc}")
         
     graphics.update()
     return 1
@@ -442,7 +449,7 @@ def remote_weather(REMOTE_LOCATIONS):
             min_temp = weather_data[location]['daily']['temperature_2m_min'][0]
             max_temp = weather_data[location]['daily']['temperature_2m_max'][0]
             forecast_text = f"{short_name}: {min_temp}c {max_temp}c"
-            debug_print("DEBUG: Y POS = " + str(y_position))
+            #debug_print("DEBUG: Y POS = " + str(y_position))
             graphics.text(forecast_text, 0, y_position, 800, 2)
             y_position -= 75  # Move up for the next location
         else:
@@ -559,28 +566,54 @@ def update():
     """Main update loop."""
     while True:
         clear_screen()
+        ih.clear_button_leds()
+        ih.inky_frame.button_a.led_on()
         update_clock_ntp()
         my_bearer_token()
+        ih.inky_frame.button_a.led_off()
+        ih.inky_frame.button_b.led_on()
         my_current_usage()
+        ih.inky_frame.button_b.led_off()
+        ih.inky_frame.button_c.led_on()
 
+        debug_print(f"Debug: gc.mem_alloc {gc.mem_alloc()}")
+        debug_print(f"Debug: gc.mem_free {gc.mem_free()}")
         gc.collect()
+        debug_print("Debug: gc.collect()")
+        debug_print(f"Debug: gc.mem_alloc {gc.mem_alloc()}")
+        debug_print(f"Debug: gc.mem_free {gc.mem_free()}")
         time.sleep(UPDATE_INTERVAL)
 
         clear_screen()
-        update_clock_ntp()
+        #update_clock_ntp()
         my_current_weather(locations['Local'])
-
+        ih.inky_frame.button_c.led_off()
+        ih.inky_frame.button_d.led_on()
+        debug_print(f"Debug: gc.mem_alloc {gc.mem_alloc()}")
+        debug_print(f"Debug: gc.mem_free {gc.mem_free()}")
         gc.collect()
+        debug_print("Debug: gc.collect()")
+        debug_print(f"Debug: gc.mem_alloc {gc.mem_alloc()}")
+        debug_print(f"Debug: gc.mem_free {gc.mem_free()}")
         time.sleep(UPDATE_INTERVAL)
 
         clear_screen()
-        update_clock_ntp()
+        #update_clock_ntp()
         remote_weather(locations['ListOrder'])
+        ih.inky_frame.button_d.led_off()
+        ih.inky_frame.button_e.led_on()
 
+        debug_print(f"Debug: gc.mem_alloc {gc.mem_alloc()}")
+        debug_print(f"Debug: gc.mem_free {gc.mem_free()}")
         gc.collect()
+        debug_print("Debug: gc.collect()")
+        debug_print(f"Debug: gc.mem_alloc {gc.mem_alloc()}")
+        debug_print(f"Debug: gc.mem_free {gc.mem_free()}")
         time.sleep(UPDATE_INTERVAL)
 
 
 # Run the update loop if executed as a script
 if __name__ == "__main__":
     update()
+
+
