@@ -91,6 +91,20 @@ def debug_print(message):
     if DEBUG_MODE:
         print(message)
 
+def retry_request(func, *args, **kwargs):
+    """Retry a request after 30 seconds if it fails."""
+    for _ in range(2):
+        try:
+            response = func(*args, **kwargs)
+            if response.status_code != 200:
+                raise Exception(f"HTTP error: {response.status_code}")
+            return response
+        except Exception as e:
+            print(f"Request failed: {e}, retrying in 30 seconds...")
+            time.sleep(30)
+    print("Request failed after retries.")
+    return None
+
 def print_header(local_curr_time, local_curr_temp):
     """Display the current time and weather data."""
     rtc_current = RTC()
@@ -123,6 +137,7 @@ def print_header(local_curr_time, local_curr_temp):
 def my_bearer_token():
     """Retrieve and return the bearer token."""
     # Connect to WiFi
+    debug_print(f"Debug: Connect to wifi")
     uasyncio.get_event_loop().run_until_complete(network_manager.client(WIFI_CONFIG.SSID, WIFI_CONFIG.PSK))
 
     headers = {
@@ -137,24 +152,16 @@ def my_bearer_token():
         "client_id": "csp-web"
     }
 
-    try:
-        response = requests.post(login_url, json=payload, headers=headers)
-        
-        if response.status_code == 200:
-            raw_data = response.json()
-            my_access_token = raw_data["data"]["access_token"]
-            global the_bearer_token_string
-            the_bearer_token_string = f'Bearer {my_access_token}'
-
-            debug_print(f"Bearer Token: {my_access_token}")
-            return my_access_token
-        else:
-            print(f"Failed to retrieve bearer token. Status code: {response.status_code}")
-            return None
-
-    except Exception as e:
-        print(f"Error retrieving bearer token: {e}")
-        return None
+    debug_print(f"Debug: Get Bearer Token")
+    response = retry_request(requests.post, login_url, json=payload, headers=headers)
+    if response:
+        raw_data = response.json()
+        my_access_token = raw_data["data"]["access_token"]
+        global the_bearer_token_string
+        the_bearer_token_string = f'Bearer {my_access_token}'
+        debug_print(f"Bearer Token: {my_access_token}")
+        return my_access_token
+    return None
 
 def my_current_usage():
     """Retrieve and display current solar usage and weather information."""
@@ -164,52 +171,31 @@ def my_current_usage():
         'Authorization': the_bearer_token_string
     }
 
-    try:
-        # Fetch solar and weather data
-        plant_response = requests.get(plant_id_endpoint, headers=headers_and_token)
-        if plant_response.status_code == 200:
-            plant_response = plant_response.json()
-            debug_print(f"Plant response: {plant_response}")
-        else:
-            print("Error: plant_response is None")
-            return
+    plant_response = retry_request(requests.get, plant_id_endpoint, headers=headers_and_token)
+    if plant_response:
+        plant_response = plant_response.json()
+        debug_print(f"Plant response: {plant_response}")
 
-        inverter_response = requests.get(inverter_endpoint, headers=headers_and_token)
-        if inverter_response.status_code == 200:
-            inverter_response = inverter_response.json()
-            debug_print(f"Inverter response: {inverter_response}")
-        else:
-            print("Error: inverter_response is None")
-            return
+    inverter_response = retry_request(requests.get, inverter_endpoint, headers=headers_and_token)
+    if inverter_response:
+        inverter_response = inverter_response.json()
+        debug_print(f"Inverter response: {inverter_response}")
 
-        grid_response = requests.get(grid_endpoint, headers=headers_and_token)
-        if grid_response.status_code == 200:
-            grid_response = grid_response.json()
-            debug_print(f"Grid response: {grid_response}")
-        else:
-            print("Error: grid_response is None")
-            return
+    grid_response = retry_request(requests.get, grid_endpoint, headers=headers_and_token)
+    if grid_response:
+        grid_response = grid_response.json()
+        debug_print(f"Grid response: {grid_response}")
 
-        load_response = requests.get(load_endpoint, headers=headers_and_token)
-        if load_response.status_code == 200:
-            load_response = load_response.json()
-            debug_print(f"Load response: {load_response}")
-        else:
-            print("Error: load_response is None")
-            return
+    load_response = retry_request(requests.get, load_endpoint, headers=headers_and_token)
+    if load_response:
+        load_response = load_response.json()
+        debug_print(f"Load response: {load_response}")
 
-        local_curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={LOCAL_LOCATION[0]}&longitude={LOCAL_LOCATION[1]}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=1'
-        curr_temp_response = requests.get(local_curr_temp_endpoint)
-        if curr_temp_response.status_code == 200:
-            curr_temp_response = curr_temp_response.json()
-            debug_print(f"Temperature response: {curr_temp_response}")
-        else:
-            print("Error: curr_temp_response is None")
-            return
-
-    except Exception as error:
-        print(f"Error retrieving usage data: {error}")
-        return
+    local_curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={LOCAL_LOCATION[0]}&longitude={LOCAL_LOCATION[1]}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=1'
+    curr_temp_response = retry_request(requests.get, local_curr_temp_endpoint)
+    if curr_temp_response:
+        curr_temp_response = curr_temp_response.json()
+        debug_print(f"Temperature response: {curr_temp_response}")
 
     gc.collect()
 
@@ -305,23 +291,14 @@ def my_current_weather(LOCATION):
         'Content-type': 'application/json',
         'Accept': 'application/json'
     }
-    
-    # Construct the weather API endpoint with the given location coordinates
     curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={LOCATION[0]}&longitude={LOCATION[1]}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=5'
 
-    print(f"FULL WEATHER RUN: {LOCATION[2]}")
-    
-    try:
-        curr_temp_req = requests.get(curr_temp_endpoint)
-        if curr_temp_req.status_code == 200:
-            curr_temp_response = curr_temp_req.json()
-            debug_print(f"Weather response for {LOCATION[2]}: {curr_temp_response}")
-        else:
-            print(f"Error: Failed to fetch weather for {LOCATION[2]}")
-            return
-        
-    except Exception as error:
-        print(f"Error fetching weather data for {LOCATION[2]}: {error}")
+    curr_temp_req = retry_request(requests.get, curr_temp_endpoint)
+    if curr_temp_req:
+        curr_temp_response = curr_temp_req.json()
+        debug_print(f"Weather response for {LOCATION[2]}: {curr_temp_response}")
+    else:
+        print(f"Error: Failed to fetch weather for {LOCATION[2]}")
         return
 
     # Extract relevant weather information
@@ -409,9 +386,6 @@ def remote_weather(REMOTE_LOCATIONS):
         'Accept': 'application/json'
     }
 
-    debug_print("Fetching weather for multiple locations...")
-
-    # Initialize dictionary to store weather data for each remote location
     weather_data = {}
 
     for location in REMOTE_LOCATIONS:
@@ -423,17 +397,12 @@ def remote_weather(REMOTE_LOCATIONS):
         latitude, longitude, short_name = location_info
         curr_temp_endpoint = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&wind_speed_unit=mph&precipitation_unit=inch&timezone=Europe%2FLondon&forecast_days=1'
 
-        print(f"Fetching weather for {short_name}...")
-        try:
-            response = requests.get(curr_temp_endpoint)
-            if response.status_code == 200:
-                weather_data[location] = response.json()
-                debug_print(f"Weather response for {short_name}: {weather_data[location]}")
-            else:
-                print(f"Error: Failed to fetch weather for {short_name} (status code: {response.status_code})")
-                continue
-        except Exception as error:
-            print(f"Error fetching weather data for {short_name}: {error}")
+        response = retry_request(requests.get, curr_temp_endpoint)
+        if response:
+            weather_data[location] = response.json()
+            debug_print(f"Weather response for {short_name}: {weather_data[location]}")
+        else:
+            print(f"Error: Failed to fetch weather for {short_name} (status code: {response.status_code})")
             continue
 
     # Display weather data for all remote locations
@@ -463,16 +432,18 @@ def remote_weather(REMOTE_LOCATIONS):
 
 
 def get_soc():
+    """Get the state of charge for the battery."""
     headers_and_token = {
         'Content-type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': the_bearer_token_string }
-    inverter_response = requests.get(inverter_endpoint, headers=headers_and_token)
-    if inverter_response.status_code == 200:
+        'Authorization': the_bearer_token_string
+    }
+    inverter_response = retry_request(requests.get, inverter_endpoint, headers=headers_and_token)
+    if inverter_response:
         inverter_response = inverter_response.json()
         debug_print(f"Inverter response: {inverter_response}")
     else:
-        print("Error: inverter_response is None")
+        return 0
         
     # Ensure inverter_response['data'] exists and check for 'soc'
     soc = 0 #default to a 0 State of Charge for the battery
