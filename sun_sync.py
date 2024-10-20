@@ -348,7 +348,7 @@ def my_current_weather(LOCATION):
     
     graphics.text("Battery", 545, 190, 800, 1)
     soc_string = f"{soc}%"
-    graphics.text(soc_string, 545, 220, 800, 1)
+    graphics.text(soc_string, 545, 240, 800, 2)
     
     graphics.line(0, 280, 190, 280, 4) # line(x1, y1, x2, y2, thickness)
     
@@ -594,3 +594,5 @@ def update():
 # Run the update loop if executed as a script
 if __name__ == "__main__":
     update()
+
+
