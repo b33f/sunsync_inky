@@ -23,6 +23,8 @@ UPDATE_INTERVAL = 60  # 1 minute in seconds
 BLACK, WHITE, GREEN, BLUE, RED, YELLOW, ORANGE, TAUPE = range(8)
 DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 fDOW = ['DOW', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+LOCAL_CURR_TIME = "??:??"
+LOCAL_CURR_TEMP = "??"
 
 # Debug Mode
 DEBUG_MODE = False  # Set to False to disable debug output
@@ -105,7 +107,7 @@ def retry_request(func, *args, **kwargs):
     print("Request failed after retries.")
     return None
 
-def print_header(local_curr_time, local_curr_temp):
+def print_header(LOCAL_CURR_TIME, LOCAL_CURR_TEMP):
     """Display the current time and weather data."""
     rtc_current = RTC()
     timestamp = rtc_current.datetime()
@@ -120,7 +122,7 @@ def print_header(local_curr_time, local_curr_temp):
     
     timestring = f"{dow_now} {timestring1} {timestring2}:{timestamp[5]:02d}"
     print(f"{timestring} - Header Now")
-    print(f"{local_curr_time} - Header Local Weather Data")
+    print(f"{LOCAL_CURR_TIME} - Header Local Weather Data")
 
     graphics.set_pen(BLACK)
     graphics.rectangle(0, 0, 800, 60)
@@ -130,7 +132,7 @@ def print_header(local_curr_time, local_curr_temp):
     graphics.text(timestring, 15, 35, 800, 2)
 
     graphics.set_pen(YELLOW)
-    graphics.text(f"{local_curr_temp}c", 590, 35, 800, 2)
+    graphics.text(f"{LOCAL_CURR_TEMP}c", 590, 35, 800, 2)
     graphics.set_pen(BLACK)
     return 1
 
@@ -165,6 +167,7 @@ def my_bearer_token():
 
 def my_current_usage():
     """Retrieve and display current solar usage and weather information."""
+    global LOCAL_CURR_TEMP
     headers_and_token = {
         'Content-type': 'application/json',
         'Accept': 'application/json',
@@ -236,16 +239,16 @@ def my_current_usage():
                 load_power = 0  # Default to 0 if missing
 
             if 'current' in curr_temp_response and 'temperature_2m' in curr_temp_response['current']:
-                local_curr_temp = curr_temp_response['current']['temperature_2m']
+                LOCAL_CURR_TEMP = curr_temp_response['current']['temperature_2m']
             else:
-                local_curr_temp = 0  # Default temperature if missing
+                LOCAL_CURR_TEMP = 0  # Default temperature if missing
 
             if 'current' in curr_temp_response and 'time' in curr_temp_response['current']:
-                local_curr_time = curr_temp_response['current']['time']
+                LOCAL_CURR_TIME = curr_temp_response['current']['time']
             else:
-                local_curr_time = "unknown"  # Default time if missing
+                LOCAL_CURR_TIME = "unknown"  # Default time if missing
 
-            print_header(local_curr_time, local_curr_temp)
+            print_header(LOCAL_CURR_TIME, LOCAL_CURR_TEMP)
             display_power_data(current_gen_w, load_power, bat_usage, grid_power)
             draw_batt(soc)
             current_gen_w = []
@@ -302,11 +305,11 @@ def my_current_weather(LOCATION):
         return
 
     # Extract relevant weather information
-    local_curr_temp = curr_temp_response['current']['temperature_2m']
-    local_curr_time = curr_temp_response['current']['time']
+    LOCAL_CURR_TEMP = curr_temp_response['current']['temperature_2m']
+    LOCAL_CURR_TIME = curr_temp_response['current']['time']
     
     # Display weather data using print_header
-    print_header(local_curr_time, local_curr_temp)
+    print_header(LOCAL_CURR_TIME, LOCAL_CURR_TEMP)
     
     forecast_title_y = 50
     forecast_offset = 60
@@ -341,8 +344,11 @@ def my_current_weather(LOCATION):
     graphics.set_font("sans")
     graphics.set_pen(BLACK)
     graphics.set_thickness(4)
-    graphics.text("H 77% UV 1.45", 545, 190, 800, 1)
-    graphics.text("AQI 26 Fair", 545, 220, 800, 1)
+    soc = get_soc()
+    
+    graphics.text("Battery", 545, 190, 800, 1)
+    soc_string = f"{soc}%"
+    graphics.text(soc_string, 545, 220, 800, 1)
     
     graphics.line(0, 280, 190, 280, 4) # line(x1, y1, x2, y2, thickness)
     
@@ -426,6 +432,8 @@ def remote_weather(REMOTE_LOCATIONS):
 
     soc = get_soc()
     draw_batt(soc)
+    # Display weather data using print_header with cached data
+    print_header(LOCAL_CURR_TIME, LOCAL_CURR_TEMP)
     
     graphics.update()
     return 1
@@ -586,5 +594,3 @@ def update():
 # Run the update loop if executed as a script
 if __name__ == "__main__":
     update()
-
-
